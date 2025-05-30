@@ -35,7 +35,8 @@ struct client {
 };
 
 struct server {
-	int fd;
+	const char* ip;
+	unsigned short port;
 };
 
 int resolve(const char *host, unsigned short port, struct addrinfo** addr);

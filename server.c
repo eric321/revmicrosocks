@@ -31,34 +31,49 @@ int bindtoip(int fd, union sockaddr_union *bindaddr) {
 	return 0;
 }
 
-int server_waitclient(struct server *server, struct client* client) {
-	socklen_t clen = sizeof client->addr;
-	return ((client->fd = accept(server->fd, (void*)&client->addr, &clen)) == -1)*-1;
-}
-
-int server_setup(struct server *server, const char* listenip, unsigned short port) {
+int do_connect(struct server *server) {
 	struct addrinfo *ainfo = 0;
-	if(resolve(listenip, port, &ainfo)) return -1;
+	if(resolve(server->ip, server->port, &ainfo)) return 1;
 	struct addrinfo* p;
-	int listenfd = -1;
+	int fd = -1;
 	for(p = ainfo; p; p = p->ai_next) {
-		if((listenfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) < 0)
+		if((fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) < 0) {
+			perror("socket");
 			continue;
-		int yes = 1;
-		setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
-		if(bind(listenfd, p->ai_addr, p->ai_addrlen) < 0) {
-			close(listenfd);
-			listenfd = -1;
+		}
+		int val = 4 * 1024 * 1024;
+		if(setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &val, sizeof(int)) < 0) {
+			perror("setsockopt SO_SNDBUF");
+		}
+		if(setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &val, sizeof(int)) < 0) {
+			perror("setsockopt SO_RCVBUF");
+		}
+		if(connect(fd, p->ai_addr, p->ai_addrlen) < 0) {
+			perror("connect");
+			close(fd);
+			fd = -1;
 			continue;
 		}
 		break;
 	}
 	freeaddrinfo(ainfo);
-	if(listenfd < 0) return -2;
-	if(listen(listenfd, SOMAXCONN) < 0) {
-		close(listenfd);
-		return -3;
+	return fd;
+}
+
+int server_waitclient(struct server *server, struct client* client) {
+	int sleeptime = 1;
+	for(;;) {
+		if((client->fd = do_connect(server)) >= 0) {
+			return 0;
+		}
+		sleep(sleeptime);
+		sleeptime *= 2;
+		if(sleeptime > 300) sleeptime = 300;
 	}
-	server->fd = listenfd;
+}
+
+int server_setup(struct server *server, const char* connectip, unsigned short port) {
+	server->ip = connectip;
+	server->port = port;
 	return 0;
 }
