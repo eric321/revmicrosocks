@@ -271,27 +271,38 @@ static void copyloop(int fd1, int fd2) {
 		[0] = {.fd = fd1, .events = POLLIN},
 		[1] = {.fd = fd2, .events = POLLIN},
 	};
+	int infd, bidir = 1;
 
 	while(1) {
-		/* inactive connections are reaped after 15 min to free resources.
-		   usually programs send keep-alive packets so this should only happen
-		   when a connection is really unused. */
-		switch(poll(fds, 2, 60*15*1000)) {
-			case 0:
-				return;
-			case -1:
-				if(errno == EINTR || errno == EAGAIN) continue;
-				else perror("poll");
-				return;
+		if(bidir) {
+			/* inactive connections are reaped after 15 min to free resources.
+			   usually programs send keep-alive packets so this should only happen
+			   when a connection is really unused. */
+			switch(poll(fds, 2, 60*15*1000)) {
+				case 0:
+					return;
+				case -1:
+					if(errno == EINTR || errno == EAGAIN) continue;
+					else perror("poll");
+					return;
+			}
+			infd = (fds[0].revents & POLLIN) ? fd1 : fd2;
 		}
-		int infd = (fds[0].revents & POLLIN) ? fd1 : fd2;
 		int outfd = infd == fd2 ? fd1 : fd2;
 		/* since the biggest stack consumer in the entire code is
 		   libc's getaddrinfo(), we can safely use at least half the
 		   available stacksize to improve throughput. */
 		char buf[MIN(16*1024, THREAD_STACK_SIZE/2)];
 		ssize_t sent = 0, n = read(infd, buf, sizeof buf);
-		if(n <= 0) return;
+		if(n < 0) return;
+		if(n == 0) {
+			if(!bidir) return;
+			shutdown(outfd, SHUT_WR);
+			/* from now on we can skip the poll */
+			bidir = 0;
+			infd = outfd;
+			continue;
+		}
 		while(sent < n) {
 			ssize_t m = write(outfd, buf+sent, n-sent);
 			if(m < 0) return;
