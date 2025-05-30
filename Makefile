@@ -10,7 +10,8 @@ OBJS = $(SRCS:.c=.o)
 
 LIBS = -lpthread
 
-CFLAGS += -Wall -std=c99
+CFLAGS += -Wall -std=c99 -O2
+LDFLAGS += -s
 
 INSTALL = ./install.sh
 
