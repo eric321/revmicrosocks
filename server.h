@@ -35,8 +35,7 @@ struct client {
 };
 
 struct server {
-	const char* ip;
-	unsigned short port;
+	int fd;
 };
 
 int resolve(const char *host, unsigned short port, struct addrinfo** addr);
@@ -45,6 +44,7 @@ int bindtoip(int fd, union sockaddr_union *bindaddr);
 
 int server_waitclient(struct server *server, struct client* client);
 int server_setup(struct server *server, const char* listenip, unsigned short port);
+int server_connect(const char* connectip, unsigned short port);
 
 #endif
 

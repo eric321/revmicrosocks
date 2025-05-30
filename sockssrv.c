@@ -397,9 +397,9 @@ static int usage(void) {
 	dprintf(2,
 		"MicroSocks SOCKS5 Server\n"
 		"------------------------\n"
-		"usage: microsocks -1 -q -i connectip -p port -u user -P pass -b bindaddr -w ips\n"
+		"usage: microsocks -1 -q -i listenip -p port -u user -P pass -b bindaddr -w ips -c connectip\n"
 		"all arguments are optional.\n"
-		"by default connectip is 0.0.0.0 and port 1080.\n\n"
+		"by default listenip is 0.0.0.0 and port 1080.\n\n"
 		"option -q disables logging.\n"
 		"option -b specifies which ip outgoing connections are bound to\n"
 		"option -w allows to specify a comma-separated whitelist of ip addresses,\n"
@@ -412,6 +412,7 @@ static int usage(void) {
 		" this is handy for programs like firefox that don't support\n"
 		" user/pass auth. for it to work you'd basically make one connection\n"
 		" with another program that supports it, and then you can use firefox too.\n"
+		"option -c causes microsocks to connect to that ip instead of listening.\n"
 	);
 	return 1;
 }
@@ -424,10 +425,11 @@ static void zero_arg(char *s) {
 
 int main(int argc, char** argv) {
 	int ch;
-	const char *connectip = "0.0.0.0";
+	const char *listenip = "0.0.0.0";
+	const char *connectip = NULL;
 	char *p, *q;
 	unsigned port = 1080;
-	while((ch = getopt(argc, argv, ":1qb:i:p:u:P:w:")) != -1) {
+	while((ch = getopt(argc, argv, ":1qb:c:i:p:u:P:w:")) != -1) {
 		switch(ch) {
 			case 'w': /* fall-through */
 			case '1':
@@ -453,6 +455,9 @@ int main(int argc, char** argv) {
 			case 'b':
 				resolve_sa(optarg, 0, &bind_addr);
 				break;
+			case 'c':
+				connectip = strdup(optarg);
+				break;
 			case 'u':
 				auth_user = strdup(optarg);
 				zero_arg(optarg);
@@ -462,7 +467,7 @@ int main(int argc, char** argv) {
 				zero_arg(optarg);
 				break;
 			case 'i':
-				connectip = optarg;
+				listenip = optarg;
 				break;
 			case 'p':
 				port = atoi(optarg);
@@ -485,7 +490,7 @@ int main(int argc, char** argv) {
 	signal(SIGPIPE, SIG_IGN);
 	struct server s;
 	sblist *threads = sblist_new(sizeof (struct thread*), 8);
-	if(server_setup(&s, connectip, port)) {
+	if(connectip == NULL && server_setup(&s, listenip, port)) {
 		perror("server_setup");
 		return 1;
 	}
@@ -497,11 +502,22 @@ int main(int argc, char** argv) {
 		struct thread *curr = malloc(sizeof (struct thread));
 		if(!curr) goto oom;
 		curr->done = 0;
-		if(server_waitclient(&s, &c)) {
-			dolog("failed to create connection\n");
-			free(curr);
-			usleep(FAILURE_TIMEOUT);
-			continue;
+		if(connectip) {
+			int sleeptime = 1;
+			for(;;) {
+				c.fd = server_connect(connectip, port);
+				if(c.fd >= 0) break;
+				sleep(sleeptime);
+				sleeptime *= 2;
+				if(sleeptime > 300) sleeptime = 300;
+			}
+		} else {
+			if(server_waitclient(&s, &c)) {
+				dolog("failed to accept connection\n");
+				free(curr);
+				usleep(FAILURE_TIMEOUT);
+				continue;
+			}
 		}
 		curr->client = c;
 		if(!sblist_add(threads, &curr)) {
