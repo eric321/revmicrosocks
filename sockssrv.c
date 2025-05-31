@@ -33,6 +33,8 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <limits.h>
+#include <stdatomic.h>
+#include <time.h>
 #include "server.h"
 #include "sblist.h"
 
@@ -72,6 +74,7 @@ static pthread_rwlock_t auth_ips_lock = PTHREAD_RWLOCK_INITIALIZER;
 static const struct server* server;
 static union sockaddr_union bind_addr = {.v4.sin_family = AF_UNSPEC};
 static struct server* connector_server;
+static atomic_int bytes_out, bytes_in;
 
 enum socksstate {
 	SS_1_CONNECTED,
@@ -309,6 +312,9 @@ static void copyloop(int fd1, int fd2) {
 			if(m < 0) return;
 			sent += m;
 		}
+		atomic_fetch_add_explicit(
+			outfd == fd2? &bytes_out : &bytes_in,
+			n, memory_order_relaxed);
 	}
 }
 
@@ -386,6 +392,21 @@ static void* clientthread(void *data) {
 	}
 	close(t->client.fd);
 	t->done = 1;
+	return 0;
+}
+
+static void* statsthread(void *data) {
+	for(;;) {
+		time_t t = time(NULL);
+		int bo = atomic_exchange(&bytes_out, 0);
+		int bi = atomic_exchange(&bytes_in, 0);
+		if(bi || bo) {
+			char buf[26];
+			dolog("%.24s in %d (%d kbyte/s) out %d (%d kbyte/s)\n",
+				ctime_r(&t, buf), bi, (bi + 30000) / 60000, bo, (bo + 30000) / 60000);
+		}
+		sleep(60 - t % 60);
+	}
 	return 0;
 }
 
@@ -517,6 +538,8 @@ int main(int argc, char** argv) {
 		}
 		connector_server = &connector_s;
 	}
+	pthread_t stats;
+	pthread_create(&stats, NULL, statsthread, NULL);
 
 	while(1) {
 		collect(threads);
