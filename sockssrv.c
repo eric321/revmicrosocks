@@ -533,6 +533,9 @@ int main(int argc, char** argv) {
 				sleeptime *= 2;
 				if(sleeptime > 300) sleeptime = 300;
 			}
+			/* wait for request to come in */
+			struct pollfd pfd = {.fd = c.fd, .events = POLLIN};
+			poll(&pfd, 1, -1);
 		} else {
 			if(server_waitclient(&s, &c)) {
 				dolog("failed to accept connection\n");
