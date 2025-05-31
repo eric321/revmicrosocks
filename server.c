@@ -2,6 +2,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 
 int resolve(const char *host, unsigned short port, struct addrinfo** addr) {
 	struct addrinfo hints = {
@@ -36,13 +39,33 @@ int server_waitclient(struct server *server, struct client* client) {
 	return ((client->fd = accept(server->fd, (void*)&client->addr, &clen)) == -1)*-1;
 }
 
-void set_buffersize(int fd) {
+void set_socket_options(int fd) {
 	int val = 4 * 1024 * 1024;
 	if(setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &val, sizeof(int)) < 0) {
 		perror("setsockopt SO_SNDBUF");
 	}
 	if(setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &val, sizeof(int)) < 0) {
 		perror("setsockopt SO_RCVBUF");
+	}
+	val = 1;
+	if(setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof(int)) < 0) {
+		perror("setsockopt KEEPALIVE");
+	}
+	val = 3;
+	if(setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &val, sizeof(int)) < 0) {
+		perror("setsockopt TCP_KEEPCNT");
+	}
+	val = 60;
+	if(setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &val, sizeof(int)) < 0) {
+		perror("setsockopt TCP_KEEPIDLE");
+	}
+	val = 30;
+	if(setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &val, sizeof(int)) < 0) {
+		perror("setsockopt TCP_KEEPINTVL");
+	}
+	val = 1;
+	if(setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &val, sizeof(int)) < 0) {
+		perror("setsockopt TCP_NODELAY");
 	}
 }
 
@@ -65,7 +88,7 @@ int server_setup(struct server *server, const char* listenip, unsigned short por
 	}
 	freeaddrinfo(ainfo);
 	if(listenfd < 0) return -2;
-	set_buffersize(listenfd);
+	set_socket_options(listenfd);
 	if(listen(listenfd, SOMAXCONN) < 0) {
 		close(listenfd);
 		return -3;
@@ -85,7 +108,7 @@ int server_connect(const char* connectip, unsigned short port) {
 			perror("socket");
 			continue;
 		}
-		set_buffersize(fd);
+		set_socket_options(fd);
 		if(connect(fd, p->ai_addr, p->ai_addrlen) < 0) {
 			perror("connect");
 			close(fd);
