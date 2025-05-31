@@ -36,6 +36,16 @@ int server_waitclient(struct server *server, struct client* client) {
 	return ((client->fd = accept(server->fd, (void*)&client->addr, &clen)) == -1)*-1;
 }
 
+void set_buffersize(int fd) {
+	int val = 4 * 1024 * 1024;
+	if(setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &val, sizeof(int)) < 0) {
+		perror("setsockopt SO_SNDBUF");
+	}
+	if(setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &val, sizeof(int)) < 0) {
+		perror("setsockopt SO_RCVBUF");
+	}
+}
+
 int server_setup(struct server *server, const char* listenip, unsigned short port) {
 	struct addrinfo *ainfo = 0;
 	if(resolve(listenip, port, &ainfo)) return -1;
@@ -55,6 +65,7 @@ int server_setup(struct server *server, const char* listenip, unsigned short por
 	}
 	freeaddrinfo(ainfo);
 	if(listenfd < 0) return -2;
+	set_buffersize(listenfd);
 	if(listen(listenfd, SOMAXCONN) < 0) {
 		close(listenfd);
 		return -3;
@@ -74,13 +85,7 @@ int server_connect(const char* connectip, unsigned short port) {
 			perror("socket");
 			continue;
 		}
-		int val = 4 * 1024 * 1024;
-		if(setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &val, sizeof(int)) < 0) {
-			perror("setsockopt SO_SNDBUF");
-		}
-		if(setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &val, sizeof(int)) < 0) {
-			perror("setsockopt SO_RCVBUF");
-		}
+		set_buffersize(fd);
 		if(connect(fd, p->ai_addr, p->ai_addrlen) < 0) {
 			perror("connect");
 			close(fd);

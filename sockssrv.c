@@ -71,6 +71,7 @@ static sblist* auth_ips;
 static pthread_rwlock_t auth_ips_lock = PTHREAD_RWLOCK_INITIALIZER;
 static const struct server* server;
 static union sockaddr_union bind_addr = {.v4.sin_family = AF_UNSPEC};
+static struct server* connector_server;
 
 enum socksstate {
 	SS_1_CONNECTED,
@@ -370,7 +371,15 @@ static int handshake(struct thread *t) {
 
 static void* clientthread(void *data) {
 	struct thread *t = data;
-	int remotefd = handshake(t);
+	int remotefd = -1;
+	if(connector_server) {
+		struct client c2;
+		if(server_waitclient(connector_server, &c2) == 0) {
+			remotefd = c2.fd;
+		}
+	} else {
+		remotefd = handshake(t);
+	}
 	if(remotefd != -1) {
 		copyloop(t->client.fd, remotefd);
 		close(remotefd);
@@ -397,7 +406,7 @@ static int usage(void) {
 	dprintf(2,
 		"MicroSocks SOCKS5 Server\n"
 		"------------------------\n"
-		"usage: microsocks -1 -q -i listenip -p port -u user -P pass -b bindaddr -w ips -c connectip\n"
+		"usage: microsocks -1 -q -i listenip -p port -u user -P pass -b bindaddr -w ips -c connectip -C port2\n"
 		"all arguments are optional.\n"
 		"by default listenip is 0.0.0.0 and port 1080.\n\n"
 		"option -q disables logging.\n"
@@ -413,6 +422,8 @@ static int usage(void) {
 		" user/pass auth. for it to work you'd basically make one connection\n"
 		" with another program that supports it, and then you can use firefox too.\n"
 		"option -c causes microsocks to connect to that ip instead of listening.\n"
+		"option -C causes microsocks act as a (non-socks) data relay between two listening sockets:\n"
+		"when a connection comes in on the -p port, it waits for a connection on the -C port, then relays data between them.\n"
 	);
 	return 1;
 }
@@ -428,8 +439,8 @@ int main(int argc, char** argv) {
 	const char *listenip = "0.0.0.0";
 	const char *connectip = NULL;
 	char *p, *q;
-	unsigned port = 1080;
-	while((ch = getopt(argc, argv, ":1qb:c:i:p:u:P:w:")) != -1) {
+	unsigned port = 1080, connector_port = 0;
+	while((ch = getopt(argc, argv, ":1qb:c:C:i:p:u:P:w:")) != -1) {
 		switch(ch) {
 			case 'w': /* fall-through */
 			case '1':
@@ -457,6 +468,9 @@ int main(int argc, char** argv) {
 				break;
 			case 'c':
 				connectip = strdup(optarg);
+				break;
+			case 'C':
+				connector_port = atoi(optarg);
 				break;
 			case 'u':
 				auth_user = strdup(optarg);
@@ -495,6 +509,14 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 	server = &s;
+	struct server connector_s;
+	if(connector_port) {
+		if(server_setup(&connector_s, listenip, connector_port)) {
+			perror("connector_server_setup");
+			return 1;
+		}
+		connector_server = &connector_s;
+	}
 
 	while(1) {
 		collect(threads);
