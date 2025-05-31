@@ -1,3 +1,57 @@
+Fork of MicroSocks - multithreaded, small, efficient SOCKS5 server.
+===================================================================
+This fork of MicroSocks adds two options:
+- `-c <host>`
+- `-C <port>`
+
+These options allow the use of MicroSocks on a server that doesn't allow
+incoming connections. On that server you run it with `-c <host>`. Instead of
+listening on the port specified with `-p <port>`, it connects to
+`<host>:<port>`, and then waits for a socks request to come in.
+
+On the machine where your socks client (e.g., browser) runs, you run
+MicroSocks with `-p <port> -C <port2>`. Make sure `<port>` is reachable from
+the other machine (e.g., configure a portforward on your router). Configure
+your browser to use `<port2>` as the socks proxy (e.g.,
+`--proxy-server=socks5://localhost:<port2>`).
+
+The life of a socks connection in this setup:
+- The server's MicroSocks connects to the client's MicroSocks.
+- The server's MicroSocks waits for a request to come in on that connection.
+- The client's MicroSocks waits for a connection to come in from the browser
+  (on port2).
+
+(time passes)
+
+- The browser connects to the client's MicroSocks (port2).
+- The client's MicroSocks exchanges data with the server's MicroSocks (so
+  the browser's socks request is sent to the server).
+- The server handles the socks request, and creates a new connection to the
+  client's MicroSocks, to get ready for the next connection.
+
+In a diagram, with the arrows indicating how the TCP connections are created:
+```
+ ┌───────┐   ┌──────────┐   ┌─────────────┐
+ │BROWSER│⇒ │  CLIENT  │⇐ │ NAT ROUTER  │
+ │       │⇒ │MICROSOCKS│⇐ │W/PORTFORWARD│
+ └───────┘   └──────────┘   └─────────────┘
+                                ⇑⇑
+ ┌───────┐   ┌──────────┐   ┌───────────────────────────┐
+ │ SOME  │⇐ │  SERVER  │⇒ │  NAT ROUTER OR FIREWALL   │
+ │WEBSITE│⇐ │MICROSOCKS│⇒ │(ONLY OUTGOING CONNECTIONS)│
+ └───────┘   └──────────┘   └───────────────────────────┘
+```
+
+This fork also sets the TCP buffer sizes to 4 MByte, which is necessary to
+achieve good throughput on high-latency links (you can also bump the defaults in
+/proc/sys/net, but that requires root).
+
+
+
+original README.md
+==================
+
+
 MicroSocks - multithreaded, small, efficient SOCKS5 server.
 ===========================================================
 
