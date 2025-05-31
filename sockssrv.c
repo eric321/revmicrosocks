@@ -530,8 +530,7 @@ int main(int argc, char** argv) {
 				c.fd = server_connect(connectip, port);
 				if(c.fd >= 0) break;
 				sleep(sleeptime);
-				sleeptime *= 2;
-				if(sleeptime > 300) sleeptime = 300;
+				sleeptime = MIN(sleeptime * 2, 60);
 			}
 			/* wait for request to come in */
 			struct pollfd pfd = {.fd = c.fd, .events = POLLIN};
