@@ -32,14 +32,16 @@ The life of a socks connection in this setup:
 In a diagram, with the arrows indicating how the TCP connections are created:
 ```
  +---------+    +------------+    +---------------+
- | BROWSER |--->|   CLIENT   |<---|  NAT ROUTER   |<-----------------+
- |         |--->| MICROSOCKS |<---| W/PORTFORWARD |<---------------+ |
- +---------+    +------------+    +---------------+                | |
-                                                                   | |
- +---------+    +------------+    +-----------------------------+  | |
- |  SOME   |<---|   SERVER   |--->|   NAT ROUTER OR FIREWALL    |--+ |
- | WEBSITE |<---| MICROSOCKS |--->| (ONLY OUTGOING CONNECTIONS) |----+
- +---------+    +------------+    +-----------------------------+
+ | BROWSER |--->|   CLIENT   |<---|  NAT ROUTER   |<---+
+ |         |--->| MICROSOCKS |<---| W/PORTFORWARD |<-+ |
+ +---------+    +------------+    +---------------+  | |
+                                                     | |
+ +------------+       +----------------+             | |
+ |            |------>|   NAT ROUTER   |-------------+ |
+ |   SERVER   |------>|   OR FIREWALL  |---------------+  +---------+
+ | MICROSOCKS |------>| (ONLY OUTGOING |----------------->|  SOME   |
+ |            |------>|  CONNECTIONS)  |----------------->| WEBSITE |
+ +------------+       +----------------+                  +---------+
 ```
 
 This fork also sets the TCP buffer sizes to 4 MByte, which is necessary to
