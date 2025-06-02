@@ -190,6 +190,7 @@ static int connect_socks_target(unsigned char *buf, size_t n, struct client *cli
 			return -EC_GENERAL_FAILURE;
 		}
 	}
+	set_socket_options(fd);
 	if(SOCKADDR_UNION_AF(&bind_addr) == raddr->ai_family &&
 	   bindtoip(fd, &bind_addr) == -1)
 		goto eval_errno;
